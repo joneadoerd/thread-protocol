@@ -6,6 +6,9 @@ edition = "2024"
 [[bin]]
 name = "serial_pub"
 path = "src/bin/serial_pub.rs"
+[[bin]]
+name = "xpub_proxy"
+path = "src/bin/xpub_proxy.rs"
 
 [[bin]]
 name = "zmq_pub"
