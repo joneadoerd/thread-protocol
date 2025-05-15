@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 fn main() {
-    let port_name = "com1"; // Change as needed
+    let port_name = "COM3"; // Change as needed
     let baud_rate = 9600;
 
     let mut port = match serialport::new(port_name, baud_rate)

@@ -1,5 +1,4 @@
-use std::thread;
-use std::time::Duration;
+use std::{thread, time::Duration};
 use zmq::Context;
 
 fn main() {
@@ -7,20 +6,19 @@ fn main() {
     let publisher = context.socket(zmq::PUB).expect("Failed to create PUB socket");
 
     let address = "tcp://*:5555";
-    publisher
-        .bind(address)
-        .expect("Failed to bind PUB socket");
+    publisher.bind(address).expect("Failed to bind");
 
-    println!("ZeroMQ publisher bound to {}", address);
+    println!("Publisher started on {}", address);
 
     let mut counter = 0;
     loop {
-        let msg = format!("topic Message {}", counter);
-        match publisher.send(&msg, 0) {
-            Ok(_) => println!("Sent: {}", msg),
-            Err(e) => eprintln!("Failed to send: {}", e),
-        }
+        let msg1 = format!("topic1 Hello from topic1 #{}", counter);
+        let msg2 = format!("topic2 Hello from topic2 #{}", counter);
 
+        publisher.send(&msg1, 0).unwrap();
+        publisher.send(&msg2, 0).unwrap();
+
+        println!("Sent message #{}", counter);
         counter += 1;
         thread::sleep(Duration::from_secs(1));
     }
