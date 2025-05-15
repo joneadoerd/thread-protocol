@@ -3,4 +3,17 @@ name = "thread-protocol"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "serial_pub"
+path = "src/bin/serial_pub.rs"
+
+[[bin]]
+name = "zmq_pub"
+path = "src/bin/zmq_pub.rs"
+
 [dependencies]
+zmq = { version = "0.10" }
+serialport = { version = "4.7.1", features = ["default"] }
+tokio = { version = "1", features = ["full"] }
+crossbeam-channel = "0.5"
+anyhow = "1.0"
