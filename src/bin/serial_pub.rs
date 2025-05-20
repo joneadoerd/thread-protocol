@@ -1,34 +1,72 @@
-use std::io::Write;
-use std::thread;
-use std::time::Duration;
+use prost::Message;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time::{Duration, sleep};
+use tokio_serial::SerialPortBuilderExt;
 
-fn main() {
-    let port_name = "COM3"; // Change as needed
-    let baud_rate = 9600;
+#[path = "../packet.rs"]
+pub mod packet;
 
-    let mut port = match serialport::new(port_name, baud_rate)
-        .timeout(Duration::from_secs(2))
-        .open()
-    {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("Failed to open serial port: {}", e);
-            return;
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Open COM3 at 9600 baud
+    let port = tokio_serial::new("COM4", 115200)
+        .timeout(Duration::from_millis(100))
+        .open_native_async()?;
+
+    // Clone the port handle for split use
+    let (mut reader, mut writer) = tokio::io::split(port);
+
+    // Spawn receiver task
+    let receiver = tokio::spawn(async move {
+        loop {
+            let mut buf = vec![0u8; 1024];
+            match reader.read(&mut buf).await {
+                Ok(n) => {
+                    buf.truncate(n);
+                    match packet::PacketHeader::decode(&*buf) {
+                        Ok(packet) => {
+                            println!("[Receiver] Received Packet: {:?}", packet);
+                        }
+                        Err(e) => {
+                            eprintln!("[Receiver] Decode error: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[Receiver] Error: {}", e);
+                    break;
+                }
+            }
         }
-    };
+    });
 
-    println!("Writing to serial port...");
-    let mut counter = 0;
+    // Spawn sender task
+    let sender = tokio::spawn(async move {
+        let envelope = packet::PacketHeader {
+            id: 1,
+            length: 2,
+            checksum: 3,
+            version: 4,
+            flags: 5,
+        };
 
-    loop {
-        let msg = format!("Serial Message {}\n", counter);
-        if let Err(e) = port.write(msg.as_bytes()) {
-            eprintln!("Failed to write to serial: {}", e);
-        } else {
-            println!("Sent: {}", msg.trim());
+        loop {
+            let mut buf = Vec::new();
+
+            envelope.encode(&mut buf).unwrap();
+            if let Err(e) = writer.write_all(&buf).await {
+                eprintln!("[Sender] Error: {}", e);
+                break;
+            } else {
+                println!("[Sender] Sent: {:?}", envelope);
+                // println!("[Sender] Buffer: {:?}", buf);
+            }
+            sleep(Duration::from_millis(500)).await;
         }
+    });
 
-        counter += 1;
-        thread::sleep(Duration::from_secs(1));
-    }
+    // Wait for both tasks
+    let _ = tokio::try_join!(receiver, sender)?;
+
+    Ok(())
 }

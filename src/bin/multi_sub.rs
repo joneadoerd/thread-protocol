@@ -1,38 +1,34 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::task;
-use zmq::Context;
+use zmq::{Context, DONTWAIT};
 
 async fn start_subscriber(ctx: Arc<Context>, topic: String, id: usize) {
     task::spawn_blocking(move || {
         let socket = ctx.socket(zmq::SUB).expect("Failed to create SUB");
-        socket.connect("tcp://localhost:7000").expect("Failed to connect");
-        socket.set_subscribe(topic.as_bytes()).expect("Subscribe failed");
+        socket
+            .connect("tcp://localhost:7000")
+            .expect("Failed to connect");
+        socket
+            .set_subscribe(topic.as_bytes())
+            .expect("Subscribe failed");
 
         println!("[Subscriber {}] Subscribed to '{}'", id, topic);
 
         loop {
-            match socket.recv_string(0) {
-                Ok(Ok(msg)) => {
-                    // Expected message format: "topic id|payload"
-                    let parts: Vec<&str> = msg.splitn(2, ' ').collect();
-                    if parts.len() == 2 {
-                        let topic = parts[0];
-                        let data = parts[1];
-
-                        let data_parts: Vec<&str> = data.splitn(2, '|').collect();
-                        if data_parts.len() == 2 {
-                            let pub_id = data_parts[0];
-                            let payload = data_parts[1];
-                            println!(
-                                "[Subscriber {}] Topic: {}, From Publisher {} => {}",
-                                id, topic, pub_id, payload
-                            );
-                        }
+            match socket.recv_multipart(DONTWAIT) {
+                Ok(msg_parts) => {
+                    if msg_parts.len() == 2 {
+                        let topic = String::from_utf8_lossy(&msg_parts[0]);
+                        let message = String::from_utf8_lossy(&msg_parts[1]);
+                        println!("Received [{}]: {}", topic, message);
                     }
                 }
-                Ok(Err(e)) => eprintln!("[Subscriber {}] Invalid UTF-8: {:?}", id, e),
-                Err(e) => eprintln!("[Subscriber {}] ZMQ error: {:?}", id, e),
+                Err(_) => {
+                    // eprintln!("Receive error: {}", e);
+                }
             }
+
+            std::thread::sleep(Duration::from_millis(100));
         }
     });
 }

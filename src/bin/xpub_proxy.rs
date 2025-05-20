@@ -40,7 +40,7 @@ fn main() {
                     Ok(msg) => msg,
                     Err(_) => break,
                 };
-                let addr_msg = match monitor_socket.recv_msg(0) {
+                let _addr_msg = match monitor_socket.recv_msg(0) {
                     Ok(msg) => msg,
                     Err(_) => break,
                 };
@@ -111,11 +111,61 @@ fn main() {
             xsub.send(msg, 0).expect("Forward to XSUB failed");
         }
 
-        // Forward data from PUBs to SUBs
-        while let Ok(msg) = xsub.recv_msg(zmq::DONTWAIT) {
-            xpub.send(msg, 0).expect("Forward to XPUB failed");
-        }
+        loop {
+            let mut msg_parts = vec![];
+            // Receive all parts of a multipart message
+            loop {
+                match xsub.recv_msg(zmq::DONTWAIT) {
+                    Ok(part) => {
+                        let more = xsub.get_rcvmore().unwrap();
+                        msg_parts.push(part);
+                        if !more {
+                            break;
+                        }
+                    }
+                    Err(e) if e == zmq::Error::EAGAIN => break, // No more messages now
+                    Err(e) => {
+                        eprintln!("Error receiving from XSUB: {}", e);
+                        break;
+                    }
+                }
+            }
 
-        thread::sleep(Duration::from_millis(1));
+            if !msg_parts.is_empty() {
+                let parts_len = msg_parts.len();
+                for (i, part) in msg_parts.into_iter().enumerate() {
+                    let flags = if i == parts_len - 1 {
+                        0
+                    } else {
+                        zmq::SNDMORE
+                    };
+                    xpub.send(part, flags).expect("Send to XPUB failed");
+                }
+            }
+
+            // Also check for subscription control messages
+            if let Ok(msg) = xpub.recv_msg(zmq::DONTWAIT) {
+                let data = msg.as_ref();
+                if !data.is_empty() {
+                    let is_sub = data[0] == 1;
+                    let topic = String::from_utf8_lossy(&data[1..]).to_string();
+
+                    let mut subs = topic_subs.lock().unwrap();
+                    let count = subs.entry(topic.clone()).or_insert(0);
+                    if is_sub {
+                        *count += 1;
+                        println!("➕ SUBSCRIBED to '{}'. Total: {}", topic, count);
+                    } else if *count > 0 {
+                        *count -= 1;
+                        println!("➖ UNSUBSCRIBED from '{}'. Remaining: {}", topic, count);
+                    }
+                }
+
+                // Forward sub control message to XSUB
+                xsub.send(msg, 0).expect("Forward to XSUB failed");
+            }
+
+            thread::sleep(Duration::from_millis(1));
+        }
     }
 }

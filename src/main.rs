@@ -3,7 +3,6 @@ mod communication;
 
 use communication::serial::SerialComm;
 use communication::strategy::CommunicationStrategy;
-use communication::zeromq::ZmqComm;
 
 use crossbeam_channel::unbounded;
 use std::sync::Arc;
@@ -79,6 +78,6 @@ async fn main() {
 
     // Keep main alive
     loop {
-        std::thread::park();
+        thread::park();
     }
 }
