@@ -1,3 +1,5 @@
+use std::env;
+
 use prost::Message;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::{Duration, sleep};
@@ -8,8 +10,10 @@ pub mod packet;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+        let args: Vec<String> = env::args().collect();
+    let com_num = args.get(1).unwrap_or(&"4".to_string()).clone();
     // Open COM3 at 9600 baud
-    let port = tokio_serial::new("COM4", 115200)
+    let port = tokio_serial::new(format!("com{}", com_num), 115200)
         .timeout(Duration::from_millis(100))
         .open_native_async()?;
 
@@ -43,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
     // Spawn sender task
     let sender = tokio::spawn(async move {
         let envelope = packet::PacketHeader {
-            id: 1,
+            id: com_num.parse().unwrap_or(0),
             length: 2,
             checksum: 3,
             version: 4,
